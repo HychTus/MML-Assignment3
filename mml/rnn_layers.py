@@ -365,7 +365,17 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # 首先计算 i f o g 四个 gate 的值
+    # 然后计算 cell 的值, 再从 cell 的值计算 next_h
+    a = x @ Wx + prev_h @ Wh + b
+    i, f, o, g = np.split(a, 4, axis=1)
+    i = sigmoid(i)
+    f = sigmoid(f)
+    o = sigmoid(o)
+    g = np.tanh(g)
+    next_c = f * prev_c + i * g # gate gate 表示新写入的内容
+    next_h = o * np.tanh(next_c) # 对于 cell 还有 tanh 的激活
+    cache = x, prev_h, prev_c, Wx, Wh, b, i, f, o, g, next_c, next_h
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -400,7 +410,28 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, prev_h, prev_c, Wx, Wh, b, i, f, o, g, next_c, next_h = cache
+    
+    # 之前计算的是 c 和 h 后续的导数, 但是在本层内部之间还有关系
+    dnext_c += dnext_h * o * (1 - np.tanh(next_c)**2)
+    
+    # i, f, g 只对于 c 有贡献, o 只对于 h 有贡献
+    # sigmoid 函数的导数为 sigmoid(x) * (1 - sigmoid(x))
+    di = dnext_c * g * i * (1 - i)
+    df = dnext_c * prev_c * f * (1 - f)
+    do = dnext_h * np.tanh(next_c) * o * (1 - o)
+    dg = dnext_c * i * (1 - g**2)
+    
+    # a = x @ Wx + prev_h @ Wh + b
+    # 可以使用 stack, hstack 等函数, 但是还是 concatenate 更便于记忆
+    da = np.concatenate((di, df, do, dg), axis=1)
+    dx = da @ Wx.T
+    dWx = x.T @ da
+    dWh = prev_h.T @ da
+    db = np.sum(da, axis=0)
+    
+    dprev_h = da @ Wh.T
+    dprev_c = dnext_c * f
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -439,7 +470,22 @@ def lstm_forward(x, h0, Wx, Wh, b):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, T, D = x.shape
+    _, H = h0.shape
+    
+    h = np.zeros((N, T, H))
+    c = np.zeros((N, H)) # c 初始设置为 0, 并且不输出, 但是要保存到 cache 中
+
+    cache = []
+    prev_h = h0
+    prev_c = c
+    
+    for t in range(T):
+        next_h, next_c, cache_t = lstm_step_forward(x[:, t, :], prev_h, prev_c, Wx, Wh, b)
+        h[:, t, :] = next_h
+        cache.append(cache_t)
+        prev_h = next_h
+        prev_c = next_c
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -470,7 +516,32 @@ def lstm_backward(dh, cache):
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+
+    N, T, H = dh.shape
+    _, D = cache[0][0].shape
+    
+    # 注意初始计算 A 的 Linear 得到的维度是 4H
+    dx = np.zeros((N, T, D))
+    dh0 = np.zeros((N, H))
+    dWx = np.zeros((D, 4*H))
+    dWh = np.zeros((H, 4*H))
+    db = np.zeros(4*H)
+    
+    # 最终 cell 没有对于 loss 计算进行贡献, 所以都是 0
+    dnext_h = np.zeros((N, H))
+    dnext_c = np.zeros((N, H))
+    for t in reversed(range(T)):
+        dnext_h += dh[:, t, :]
+        cache_t = cache[t]
+        dx_t, dprev_h, dprev_c, dWx_t, dWh_t, db_t = lstm_step_backward(dnext_h, dnext_c, cache_t)        
+        dx[:, t, :] = dx_t
+        dWx += dWx_t
+        dWh += dWh_t
+        db += db_t
+        dnext_h = dprev_h
+        dnext_c = dprev_c
+    
+    dh0 = dnext_h
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################

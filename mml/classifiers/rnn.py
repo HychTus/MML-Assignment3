@@ -163,6 +163,7 @@ class CaptioningRNN:
         if self.cell_type == 'rnn':
             h, cache_rnn = rnn_forward(word_embs, h0, Wx, Wh, b)
         elif self.cell_type == 'lstm':
+            # c 状态已经被隐藏在了 LSTM 内部
             h, cache_lstm = lstm_forward(word_embs, h0, Wx, Wh, b)
 
         out, cache_temporal = temporal_affine_forward(h, W_vocab, b_vocab)
@@ -181,6 +182,7 @@ class CaptioningRNN:
 
         # 所以是否检查了 grads 是否正确? 还是只检查了 loss?
         # 使用的 key 和初始的要相同
+        # LSTM 使用的参数和 RNN 都是一样的
         grads = {
             "W_embed": dW_embed,
             "W_proj": dW_proj,
@@ -259,26 +261,39 @@ class CaptioningRNN:
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        if self.cell_type == 'rnn':
-            h0, _ = affine_forward(features, W_proj, b_proj)
-            curr_h = h0
-            # 初始化 current_word 为 <START>
-            current_word = self._start * np.ones((N,), dtype=np.int32)
-            for t in range(max_length):
-                word_embed, _ = word_embedding_forward(current_word, W_embed)
+        # sample 的过程需要维护 cell 状态, 所以 RNN 和 LSTM 有区别
+
+        H = self.params["W_proj"].shape[1]
+        h0, _ = affine_forward(features, W_proj, b_proj)
+        c0 = np.zeros((N, H)) # 初始化 cell 为 0
+        curr_h = h0
+        if self.cell_type == 'lstm':
+            curr_c = c0
+
+        # 初始化 current_word 为 <START>
+        current_word = self._start * np.ones((N,), dtype=np.int32)
+        for t in range(max_length):
+            word_embed, _ = word_embedding_forward(current_word, W_embed)
+
+            if self.cell_type == 'rnn':
                 next_h, _ = rnn_step_forward(word_embed, curr_h, Wx, Wh, b)
-                out, _ = temporal_affine_forward(next_h.reshape(N, 1, -1), W_vocab, b_vocab)
-                # temporal_affine_forward 使用的 x 是 (N, T, D), 返回结果为·(N, T, V)
+            elif self.cell_type == 'lstm':
+                next_h, next_c, _ = lstm_step_forward(word_embed, curr_h, curr_c, Wx, Wh, b)
 
-                # out 就是转换后的结果, 不需要进行 softmax 和计算 loss
-                next_word = np.argmax(out.reshape(N, -1), axis=1)
-                captions[:, t] = next_word
-                current_word = next_word
-                curr_h = next_h # 注意 h 状态的传递
+            out, _ = temporal_affine_forward(next_h.reshape(N, 1, -1), W_vocab, b_vocab)
+            # temporal_affine_forward 使用的 x 是 (N, T, D), 返回结果为·(N, T, V)
 
-                # 采样结果中不需要包含 <START>
-                # decode 时采样到 <END> 直接结束, 后面的计算是无意义的
-                # 所以最终的长度到底是如何计算的? <END> 也被算入长度中? 是这样的
+            # out 就是转换后的结果, 不需要进行 softmax 和计算 loss
+            next_word = np.argmax(out.reshape(N, -1), axis=1)
+            captions[:, t] = next_word
+            current_word = next_word
+            curr_h = next_h # 注意 h 状态的传递
+            if self.cell_type == 'lstm':
+                curr_c = next_c
+
+            # 采样结果中不需要包含 <START>
+            # decode 时采样到 <END> 直接结束, 后面的计算是无意义的
+            # 所以最终的长度到底是如何计算的? <END> 也被算入长度中? 是这样的
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
