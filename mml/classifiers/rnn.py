@@ -101,6 +101,7 @@ class CaptioningRNN:
         # token, and the first element of captions_out will be the first word.
         captions_in = captions[:, :-1]
         captions_out = captions[:, 1:]
+        # 使用 in 作为输出计算出 out, 只能对于 out 计算 loss
 
         # You'll need this
         mask = captions_out != self._null
@@ -148,7 +149,48 @@ class CaptioningRNN:
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # 首先经过投影计算出 h0
+        # 将 caption 的输入转换成标准的 embeddding
+        # 根据 self.cell_type 对于整个过程进行计算
+        # 使用 temporal affine 计算出 scores
+        # 使用 softmax 计算出 loss
+
+        # Forward pass: Compute loss and gradients
+        # 使用提供的函数, 计算 forward 和 backward
+        h0, cache_proj = affine_forward(features, W_proj, b_proj)
+        word_embs, cache_word_embs = word_embedding_forward(captions_in, W_embed)
+
+        if self.cell_type == 'rnn':
+            h, cache_rnn = rnn_forward(word_embs, h0, Wx, Wh, b)
+        elif self.cell_type == 'lstm':
+            h, cache_lstm = lstm_forward(word_embs, h0, Wx, Wh, b)
+
+        out, cache_temporal = temporal_affine_forward(h, W_vocab, b_vocab)
+        loss, dout = temporal_softmax_loss(out, captions_out, mask, verbose=False)
+
+        # Backward pass: Compute gradients
+        dh, dW_vocab, db_vocab = temporal_affine_backward(dout, cache_temporal)
+
+        if self.cell_type == 'rnn':
+            dx, dh0, dWx, dWh, db = rnn_backward(dh, cache_rnn)
+        elif self.cell_type == 'lstm':
+            dx, dh0, dWx, dWh, db = lstm_backward(dh, cache_lstm)
+
+        dW_embed = word_embedding_backward(dx, cache_word_embs)
+        dfeatures, dW_proj, db_proj = affine_backward(dh0, cache_proj)
+
+        # 所以是否检查了 grads 是否正确? 还是只检查了 loss?
+        # 使用的 key 和初始的要相同
+        grads = {
+            "W_embed": dW_embed,
+            "W_proj": dW_proj,
+            "b_proj": db_proj,
+            "Wx": dWx,
+            "Wh": dWh,
+            "b": db,
+            "W_vocab": dW_vocab,
+            "b_vocab": db_vocab,
+        }
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -182,6 +224,7 @@ class CaptioningRNN:
           of captions should be the first sampled word, not the <START> token.
         """
         N = features.shape[0]
+        # 全部初始化为 <NULL>
         captions = self._null * np.ones((N, max_length), dtype=np.int32)
 
         # Unpack parameters
@@ -216,7 +259,26 @@ class CaptioningRNN:
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        if self.cell_type == 'rnn':
+            h0, _ = affine_forward(features, W_proj, b_proj)
+            curr_h = h0
+            # 初始化 current_word 为 <START>
+            current_word = self._start * np.ones((N,), dtype=np.int32)
+            for t in range(max_length):
+                word_embed, _ = word_embedding_forward(current_word, W_embed)
+                next_h, _ = rnn_step_forward(word_embed, curr_h, Wx, Wh, b)
+                out, _ = temporal_affine_forward(next_h.reshape(N, 1, -1), W_vocab, b_vocab)
+                # temporal_affine_forward 使用的 x 是 (N, T, D), 返回结果为·(N, T, V)
+
+                # out 就是转换后的结果, 不需要进行 softmax 和计算 loss
+                next_word = np.argmax(out.reshape(N, -1), axis=1)
+                captions[:, t] = next_word
+                current_word = next_word
+                curr_h = next_h # 注意 h 状态的传递
+
+                # 采样结果中不需要包含 <START>
+                # decode 时采样到 <END> 直接结束, 后面的计算是无意义的
+                # 所以最终的长度到底是如何计算的? <END> 也被算入长度中? 是这样的
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

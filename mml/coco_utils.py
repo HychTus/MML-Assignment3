@@ -6,6 +6,11 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 BASE_DIR = os.path.join(dir_path, "datasets/coco_captioning")
 
 def load_coco_data(base_dir=BASE_DIR, max_train=None, pca_features=True):
+    """
+    @param base_dir: directory where the data is stored, default is datasets/coco_captioning
+    @param max_train: maximum number of training examples to use (None for all)
+    @param pca_features: whether to use PCA-transformed features or raw VGG16 features
+    """
     print('base dir ', base_dir)
     data = {}
     caption_file = os.path.join(base_dir, "coco2014_captions.h5")

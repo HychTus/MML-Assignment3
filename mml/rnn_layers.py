@@ -73,7 +73,9 @@ def rnn_step_forward(x, prev_h, Wx, Wh, b):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # 印象中我是不是在 CV 导论中写过这个代码? 使用的都是相同的 code base
+    next_h = np.tanh(prev_h @ Wh + x @ Wx + b)
+    cache = (x, prev_h, Wx, Wh, b, next_h) # 将所有信息都保存下来
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -104,9 +106,26 @@ def rnn_step_backward(dnext_h, cache):
     # of the output value from tanh.                                             #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x, prev_h, Wx, Wh, b, next_h = cache
+    
+    # f(z) = tanh(z), df(z) = 1 - tanh(z)^2
+    dnext_h_tanh = dnext_h * (1 - next_h ** 2)
 
-    pass
+    # next_h = np.tanh(prev_h @ Wh + x @ Wx + b)
+    # A(i, j) * B(j, k) -> C(i, k)
+    # dA(i, j) = dC(i, k) * B(j, k)
+    dprev_h = dnext_h_tanh @ Wh.T
+    dx = dnext_h_tanh @ Wx.T
+    
+    # dB(j, k) = dC(i, k) * A(i, j)
+    dWx = x.T @ dnext_h_tanh
+    dWh = prev_h.T @ dnext_h_tanh
 
+    # A(i, j) * B(j, k) + D(k) -> C(i, k)
+    # i 为数据的 idx, 最终转化到了 k 为下标, 加的是 D(k)
+    # dD(k) = sum_i C(i, k)
+    db = np.sum(dnext_h_tanh, axis=0)
+    
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                               END OF YOUR CODE                             #
@@ -140,7 +159,22 @@ def rnn_forward(x, h0, Wx, Wh, b):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # 完整的 forward 中可以使用循环, 需要首先确认有多少 time steps
+    # cache 中以 list(tuple) 的形式进行保存
+    # 需要获取大小, 并且新建零向量
+
+    N, T, D = x.shape
+    _, H = h0.shape
+    
+    h = np.zeros((N, T, H))
+    cache = []
+    h_prev = h0
+    
+    for t in range(T):
+        h_next, cache_t = rnn_step_forward(x[:, t, :], h_prev, Wx, Wh, b)
+        h[:, t, :] = h_next
+        cache.append(cache_t)
+        h_prev = h_next
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -175,7 +209,33 @@ def rnn_backward(dh, cache):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, T, H = dh.shape
+    _, D = cache[0][0].shape # step_forward: x (N, D)
+    
+    dx = np.zeros((N, T, D))
+    dh0 = np.zeros((N, H))
+    dWx = np.zeros((D, H))
+    dWh = np.zeros((H, H))
+    db = np.zeros(H)
+    
+    # 每个 time step 的 h 都会继续运算然后输出, 所以有 (N, T, H) 的 graident
+    dh_next = np.zeros((N, H))    
+    for t in reversed(range(T)): # reverse
+
+        # 梯度向前传递, 需要累加对应的 loss 的梯度
+        #FIXME: 之前就是没有添加, 所以出现了错误
+        dh_next += dh[:, t, :]
+        cache_t = cache[t]
+        dx_t, dh_prev, dWx_t, dWh_t, db_t = rnn_step_backward(dh_next, cache_t)
+        
+        # dWx, dWh, db 需要进行累加
+        dx[:, t, :] = dx_t
+        dWx += dWx_t
+        dWh += dWh_t
+        db += db_t
+        dh_next = dh_prev
+    
+    dh0 = dh_next # 不要忘记初始状态的梯度
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -208,7 +268,13 @@ def word_embedding_forward(x, W):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # (N, T) 的输入对应的是 idx, 需要先转换成 (N, T, V) 的 one-hot 向量
+    # 然后和 W 相乘得到 (N, T, D) 的输出
+
+    # 可以直接使用这种方式从 numpy 中获取对应的向量
+    # x 的形状为 (N, T), out 的形状为 (N, T, D)
+    out = W[x]
+    cache = x, W
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -242,7 +308,15 @@ def word_embedding_backward(dout, cache):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # 导数无法传递到对应的 idx 上, 所以只能传递到 W 上  
+    # (N, T) 为 idx, 则对应的 (D) 累加到 (idx, D) 上
+    
+    x, W = cache
+    dW = np.zeros_like(W)
+    np.add.at(dW, x, dout)
+
+    # np.add.at 将上游梯度 dout 按照 x 索引的指示累加到 dW 中对应位置
+    #TODO: 不是很确定实际对于数组形状的要求是什么, 针对性设计的函数?
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -423,8 +497,14 @@ def temporal_affine_forward(x, w, b):
     - out: Output data of shape (N, T, M)
     - cache: Values needed for the backward pass
     """
+    # 这里是对于所有的 time step 同时进行计算
+    # 实际进行自回归生成 caption 时不应该使用该函数, 只在训练时使用
+
     N, T, D = x.shape
     M = b.shape[0]
+    # reshape 之后再使用矩阵乘法
+    # 如果使用 @, 也需要 reshape 之后才能矩阵乘法 (并不等价于 bmm)
+    # 最后加上 b 的时候会进行 boradcasting
     out = x.reshape(N * T, D).dot(w).reshape(N, T, M) + b
     cache = x, w, b, out
     return out, cache
@@ -478,15 +558,24 @@ def temporal_softmax_loss(x, y, mask, verbose=False):
     - dx: Gradient of loss with respect to scores x.
     """
 
+    # y 是期望的结果, mask 表示需要计算 loss 的位置 (可能有 <NULL> 填充)
+    #TODO: 对于具体源码的阅读, 需要掌握相关的知识
     N, T, V = x.shape
 
     x_flat = x.reshape(N * T, V)
     y_flat = y.reshape(N * T)
     mask_flat = mask.reshape(N * T)
 
+    # 减去最大值之后再 exp, 保证稳定性
     probs = np.exp(x_flat - np.max(x_flat, axis=1, keepdims=True))
+    # keepdims, 不然对于 axis=1 取 sum 之后无法自动 broadcasting
+    # broadcasting 是从后向前对齐
     probs /= np.sum(probs, axis=1, keepdims=True)
+    # 交叉熵损失的公式为 -p(y)*log(q(y)), p(y)=1, q(y) 是 softmax 的输出
     loss = -np.sum(mask_flat * np.log(probs[np.arange(N * T), y_flat])) / N
+
+    # 对于 softmax 的过程进行求导, 结果上是正确的
+    #TODO: 中间有转化的过程, 推导出来的结果和直接进行调整的结果类似?
     dx_flat = probs.copy()
     dx_flat[np.arange(N * T), y_flat] -= 1
     dx_flat /= N
