@@ -65,3 +65,8 @@ webencodings==0.5.1
 widgetsnbextension==3.4.2
 h5py
 imageio
+
+
+torch
+torchvision
+torchaudio

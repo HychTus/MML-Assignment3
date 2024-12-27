@@ -38,20 +38,26 @@ class CaptioningTransformer(nn.Module):
         self._start = word_to_idx.get("<START>", None)
         self._end = word_to_idx.get("<END>", None)
 
+        # visual_projection 将 visusal feature 进行投影
         self.visual_projection = nn.Linear(input_dim, wordvec_dim)
+        # embedding 使用的是固定的还是可训练的?
         self.embedding = nn.Embedding(vocab_size, wordvec_dim, padding_idx=self._null)
         self.positional_encoding = PositionalEncoding(wordvec_dim, max_len=max_length)
 
+        # 在 transformer_layer 基础上定义 TransformerDecoderLayer
+        # 在 decoder_layer 基础上定义 TransformerDecoder
         decoder_layer = TransformerDecoderLayer(input_dim=wordvec_dim, num_heads=num_heads)
         self.transformer = TransformerDecoder(decoder_layer, num_layers=num_layers)
         self.apply(self._init_weights)
 
+        # 注意 transformer 的输出需要进行投影
         self.output = nn.Linear(wordvec_dim, vocab_size)
 
     def _init_weights(self, module):
         """
         Initialize the weights of the network.
         """
+        # 对于 weights 进行初始化
         if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=0.02)
             if isinstance(module, nn.Linear) and module.bias is not None:
@@ -90,7 +96,19 @@ class CaptioningTransformer(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # Loss 需要自己进行计算, 需要对于输入进行划分, 参考 RNN 的代码
+        # 这里使用的 memory 是 image feature 吗? 是否有点太少了?
+        # 这里的 forward 只需要计算出 scores, 不需要计算 loss, 不需要讨论 in, out
+
+        word_embs = self.embedding(captions) # [N, T, W] (wordvec_dim)
+        word_embs = self.positional_encoding(word_embs) # [N, T, W]
+
+        # image feature 作为单个 token 的 memory 进行 cross attention
+        image_embs = self.visual_projection(features).view(N, 1, -1) # [N, 1, W]
+        # torch.tril 用于提取下三角矩阵, 表示 i 只能注意到 j <= i 的位置
+        tgt_mask = torch.tril(torch.ones(T, T))
+        tgt = self.transformer(word_embs, image_embs, tgt_mask)
+        scores = self.output(tgt)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -112,13 +130,14 @@ class CaptioningTransformer(nn.Module):
         """
         with torch.no_grad():
             features = torch.Tensor(features)
-            N = features.shape[0]
+            N = features.shape[0] # batch size
 
             # Create an empty captions tensor (where all tokens are NULL).
             captions = self._null * np.ones((N, max_length), dtype=np.int32)
 
             # Create a partial caption, with only the start token.
             partial_caption = self._start * np.ones(N, dtype=np.int32)
+            # 转换成 LongTensor 类型, 存储 long 类型数据
             partial_caption = torch.LongTensor(partial_caption)
             # [N] -> [N, 1]
             partial_caption = partial_caption.unsqueeze(1)
@@ -126,6 +145,10 @@ class CaptioningTransformer(nn.Module):
             for t in range(max_length):
 
                 # Predict the next token (ignoring all other time steps).
+                
+                # 输出时只输出当前的部分 caption, 内部已经进行了 mask
+                # 每次都将已经生成的 caption 全部输入, 然后使用最后的结果
+                # 有点像是 train 的过程, 强制使用 ground truth, 这样的消耗是否太大? 不能增量计算吗?
                 output_logits = self.forward(features, partial_caption)
                 output_logits = output_logits[:, -1, :]
 
@@ -141,6 +164,7 @@ class CaptioningTransformer(nn.Module):
             return captions
 
 
+# 使用 nn.Module 来定义整体的 DecoderLayer
 class TransformerDecoderLayer(nn.Module):
     """
     A single layer of a Transformer decoder, to be used with TransformerDecoder.
@@ -184,11 +208,16 @@ class TransformerDecoderLayer(nn.Module):
         Returns:
         - out: the Transformer features, of shape (N, T, W)
         """
+        # decoder 中先进行 self-attention, 再进行 cross-attention
+        # 这里对应的是单层的 decoder, tgt 对应的是 decoder 的输入, memory 对应的是 encoder 的输出
+
         # Perform self-attention on the target sequence (along with dropout and
         # layer norm).
         tgt2 = self.self_attn(query=tgt, key=tgt, value=tgt, attn_mask=tgt_mask)
+        # 对于 self-attention 进行 dropout 后 residual connection
+        # QA: 但是在内部还对于 attn-weights 进行了 dropout?
         tgt = tgt + self.dropout1(tgt2)
-        tgt = self.norm1(tgt)
+        tgt = self.norm1(tgt) # 对于输出进行 normalization
 
         # Attend to both the target sequence and the sequence from the last
         # encoder layer.
@@ -197,6 +226,7 @@ class TransformerDecoderLayer(nn.Module):
         tgt = self.norm2(tgt)
 
         # Pass
+        # 在经过 attention 之后还有 MLP 的结构, 中间使用的维度是 dim_feedforward
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
         tgt = tgt + self.dropout3(tgt2)
         tgt = self.norm3(tgt)
@@ -204,17 +234,22 @@ class TransformerDecoderLayer(nn.Module):
 
 def clones(module, N):
     "Produce N identical layers."
-    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
+    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)]) # clone N times
 
 class TransformerDecoder(nn.Module):
     def __init__(self, decoder_layer, num_layers):
         super().__init__()
+        # num_layers 个 decoder block
+        # 首先初始化 decoder_layer, 然后进行复制 (为什么不能分别初始化?)
+        # 如果分别初始化就不是整体的模型? 不能模型嵌套模型?
         self.layers = clones(decoder_layer, num_layers)
         self.num_layers = num_layers
 
     def forward(self, tgt, memory, tgt_mask=None):
         output = tgt
 
+        # 按照顺序应用对应的 layer
+        # 由于整体是 decoder, 所以 memory 和 mask 是外部传入的
         for mod in self.layers:
             output = mod(output, memory, tgt_mask=tgt_mask)
 
