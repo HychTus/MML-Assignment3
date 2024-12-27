@@ -7,7 +7,7 @@ import torch.nn as nn
 from transformers import CLIPModel, CLIPProcessor, GPT2LMHeadModel, GPT2Tokenizer
 
 
-MODEL_PATH = "/data/chy/others/mml-assignment3/models"
+MODEL_PATH = "/data/chy/others/MML-Assignment3/models"
 
 class ImageEncoder(nn.Module):
     """

@@ -15,7 +15,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import GPT2Tokenizer
 
-MODEL_PATH = "/data/chy/others/mml-assignment3/models"
+MODEL_PATH = "/data/chy/others/MML-Assignment3/models"
 
 # 原始的返回的应该是 image id
 # 但是在经过 cl_fn 之后应该返回 image embedding

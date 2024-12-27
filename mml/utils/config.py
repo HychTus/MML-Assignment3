@@ -14,7 +14,7 @@ class ConfigS:
     num_workers: int = 2
     train_size: int = 0.84
     val_size: int = 0.13
-    epochs: int = 150
+    epochs: int = 30
     lr: int = 3e-3
     k: float = 0.33
     batch_size_exp: int = 6
@@ -24,7 +24,8 @@ class ConfigS:
     forward_expansion: int = 4
     max_len: int = 40
     dropout: float = 0.1
-    weights_dir: str = os.path.join("weights", "small")
+    weights_dir: str = "/data/chy/others/MML-Assignment3/results/weights/small"
+    dataset_len: int = -1
 
 
 @dataclass
@@ -39,17 +40,17 @@ class ConfigL:
     num_workers: int = 2
     train_size: int = 0.84
     val_size: int = 0.13
-    epochs: int = 120
+    epochs: int = 30
     lr: int = 5e-3
     k: float = 0.3
-    batch_size_exp: int = 5
+    batch_size_exp: int = 5 # 这里设置的是5
     ep_len: int = 4
     num_layers: int = 5
     n_heads: int = 16
     forward_expansion: int = 4
     max_len: int = 40
     dropout: float = 0.08
-    weights_dir: str = "/data/chy/others/mml-assignment3/results/weights"
+    weights_dir: str = "/data/chy/others/MML-Assignment3/results/weights/large"
     dataset_len: int = -1
 
 

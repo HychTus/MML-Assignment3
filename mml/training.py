@@ -58,8 +58,8 @@ if __name__ == "__main__":
     # 根据 Dataset 的实现来调整相关代码
     # 不需要进行 {config.clip_model.split('/')[-1]}
     dataset = ImageCaptionDataset(
-        meta_path="/data/chy/others/mml-assignment3/datasets/train_caption.json",
-        image_cache_path=f"/data/chy/others/mml-assignment3/cache/{config.clip_model}.pkl",
+        meta_path="/data/chy/others/MML-Assignment3/datasets/train_caption_filtered.json",
+        image_cache_path=f"/data/chy/others/MML-Assignment3/cache/{config.clip_model}.pkl",
         max_len=config.max_len,
         dataset_len=config.dataset_len # 需要在 config 中添加
     )
@@ -131,7 +131,7 @@ if __name__ == "__main__":
         valid_loader=valid_loader,
         test_dataset=test_dataset,
         # test_path=os.path.join("data", "raw"), # TODO: 请你修改这里为你自己的目录
-        test_path="/data/chy/others/mml-assignment3/datasets/train2014", # 图片的路径
+        test_path="/data/chy/others/MML-Assignment3/datasets/train2014", # 图片的路径
         ckp_path=ckp_path,
         device=device,
     )

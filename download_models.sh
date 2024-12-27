@@ -12,3 +12,6 @@ GPT_MODEL_L="openai-community/gpt2-medium"
 ./hfd.sh $CLIP_MODEL_L --local-dir "./models/clip-vit-large-patch14" -x 16
 ./hfd.sh $GPT_MODEL_S --local-dir "./models/gpt2" -x 16
 ./hfd.sh $GPT_MODEL_L --local-dir "./models/gpt2-medium" -x 16
+
+Qwen="Qwen/Qwen2.5-0.5B"
+./hfd.sh $Qwen --local-dir "./models/Qwen2.5-0.5B" -x 16
