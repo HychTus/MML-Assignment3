@@ -1,4 +1,10 @@
 *.DS_Store
 *.pyc
 .vscode
-mml/datasets
+
+datasets/*
+models/*
+results/*
+cache/*
+wandb
+mml/datasets/*

@@ -20,6 +20,8 @@ from mml.utils import ConfigS, ConfigL, download_weights
 
 parser = argparse.ArgumentParser()
 
+
+# 为什么 parser 中的 "-" 在使用时就变成 "_" 了?
 parser.add_argument(
     "-C", "--checkpoint-name", type=str, default="model.pt", help="Checkpoint name"
 )
@@ -36,10 +38,12 @@ parser.add_argument(
 parser.add_argument(
     "-I", "--img-path", type=str, default="", help="Path to the test image folder"
 )
+# /data/chy/others/mml-assignment3/datasets/train2014
 
 parser.add_argument(
     "-R", "--res-path", type=str, default="", help="Path to the results folder"
 )
+# /data/chy/others/mml-assignment3/results
 
 parser.add_argument(
     "-T", "--temperature", type=float, default=1.0, help="Temperature for sampling"
@@ -74,6 +78,8 @@ def evaluate_dataset(model, dataset, img_path, save_path, temperature=1.0):
         img_path: path to images
         save_path: path to save results
     """
+    # 要给定 img_path, 才能从中找到对应 id 的图片
+
     model.eval()
 
     loop = tqdm(dataset, total=len(dataset))
@@ -92,6 +98,8 @@ def evaluate_dataset(model, dataset, img_path, save_path, temperature=1.0):
         plt.clf()
         plt.close()
 
+# evaluate 不进行训练, 只使用 checkpoint_name 和 weights_dir 加载模型
+# 然后在 test 上测试结果
 
 if __name__ == "__main__":
     model = Net(
@@ -105,8 +113,15 @@ if __name__ == "__main__":
         max_len=config.max_len,
         device=device,
     )
-    # TODO: 需要你自己实现一个ImageCaptionDataset在`data/dataset.py`中
-    dataset = ImageCaptionDataset()
+    #TODO: 需要你自己实现一个ImageCaptionDataset在`data/dataset.py`中
+    #   这里应该使用什么 dataset? 使用的比例大小是多少? 
+    #   以及这里使用的数据是 img, 而不是 encode 之后的结果  
+    dataset = ImageCaptionDataset(
+        meta_path="/data/chy/others/mml-assignment3/datasets/train_caption.json",
+        img_cache_path=f"/data/chy/others/mml-assignment3/cache/{config.clip_model.split('/')[-1]}",
+        max_len=config.max_len,
+        dataset_len=5
+    )
 
     config.train_size = int(config.train_size * len(dataset))
     config.val_size = int(config.val_size * len(dataset))
@@ -122,10 +137,13 @@ if __name__ == "__main__":
     if not os.path.isfile(ckp_path):
         download_weights(ckp_path, args.size)
 
+    #TODO: 关于加载/保存模型相关的方法
     checkpoint = torch.load(ckp_path, map_location=device)
-    model.load_state_dict(checkpoint)
+    model.load_state_dict(checkpoint) # 将 torch.load 的结果赋值给 model
 
     save_path = os.path.join(
+        # res_path 是保存结果的位置
+        # 命名为 checkpoint_name 除去后缀名
         args.res_path, f"{args.checkpoint_name[:-3]}_{args.size.upper()}"
     )
 

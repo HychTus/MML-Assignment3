@@ -59,21 +59,47 @@ class Trainer:
             self.test_result = None
 
     def train_epoch(self):
-        self.model.train()
-        self.epoch += 1
+        self.model.train() # 设置为 train 模式
+        self.epoch += 1 # 这里也+1, 在 range 的时候也+1, 是否会出现问题? 
 
         total_loss = 0
 
+        # tqdm 需要给定 total 才能显示进度 (似乎是由于什么问题导致无法获取 len?)
         loop = tqdm(self.train_loader, total=len(self.train_loader))
         loop.set_description(f"Epoch: {self.epoch} | Loss: ---")
         for batch_idx, (img_emb, cap, att_mask) in enumerate(loop):
             # TODO: 请你实现一个 training loop
-            pass
+            img_emb, cap, att_mask = (
+                img_emb.to(self.device),
+                cap.to(self.device),
+                att_mask.to(self.device),
+            )
+
+            loss = self.model.train_forward(
+                img_emb=img_emb, trg_cap=cap, att_mask=att_mask
+            )
+
+            #TODO: scaler 相关的学习
+            #   首先进行 zero_grad() (可以在 forward 之后进行)
+            #   scaler 的作用是混合精度训练 (在 backward() 时使用)
+
+            self.optimizer.zero_grad()
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            total_loss += loss.item()
         
+            # 从 dataloader 中获取的是 (img_emb, cap, att_mask)
+            # model 接受的是什么类型的数据?
+            # 参考 val 实现, 注意要转移到 device 上
+
+            # 每次需要对于 total loss 进行更新 (loss 是否已经取平均了?)
+            # 直接使用平均的 batch 的结果也没有问题
+
             loop.set_description(
                 f"Epoch: {self.epoch} | Loss: {total_loss / (batch_idx + 1):.3f}"
             )
-            loop.refresh()
+            loop.refresh() # 手动操纵 tqdm 进度条
 
         self.cur_lr = self.optimizer.param_groups[0]["lr"]
         self.train_loss.append(total_loss / (batch_idx + 1))
@@ -95,6 +121,8 @@ class Trainer:
             )
 
             with torch.no_grad():
+                # torch.cuda.amp.autocast() 用于自动切换计算精度
+                #TODO: 关于模型训练的精度和量化的学习
                 with torch.cuda.amp.autocast():
                     loss = self.model.train_forward(
                         img_emb=img_emb, trg_cap=cap, att_mask=att_mask
