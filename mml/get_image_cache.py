@@ -33,7 +33,7 @@ def check_image_cache(
         image_data = Image.open(image_path)
         with torch.no_grad():
             image_features = image_encoder(image_data)
-            assert torch.allclose(image_features.view(-1), cache[image_id])
+            assert torch.allclose(image_features.view(-1).cpu(), cache[image_id])
 
 
 def get_image_cache(
@@ -103,8 +103,18 @@ if __name__ == '__main__':
     )
     parser.add_argument("--cuda_device", type=str, default="0")
     parser.add_argument("--dataset_len", type=int, default=-1)
-    parser.add_argument("--calc_emb", type=bool, default=True)
-    parser.add_argument("--check", type=bool, default=False)
+    parser.add_argument("--check", action='store_true', default=False)
+
+    # parser.add_argument("--calc_emb", type=bool, default=True)
+    parser.add_argument("--calc_emb", action='store_true', default=True)
+    parser.add_argument("--no_calc_emb", action='store_false', dest='calc_emb')
+
+    """
+    argparse 不会自动将字符串转换为布尔值, argparse 会将任何非空字符串视为 True
+    使用 store_true 或 store_false 来设置参数的默认值, 并在命令行中通过指定参数来改变其值
+    或者定义一个函数来将字符串转换为布尔值, 并将其作为 type 参数传递给 add_argument
+    """
+
     args = parser.parse_args()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device

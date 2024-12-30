@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from mml.data import ImageCaptionDataset
 from mml.model import Net
-from mml.utils import ConfigS, ConfigL, download_weights
+from mml.utils import ConfigS, ConfigL
 
 parser = argparse.ArgumentParser()
 

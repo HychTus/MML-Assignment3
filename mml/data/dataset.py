@@ -71,22 +71,33 @@ def cl_fn(batch, image_cache, tokenizer, max_len):
     img_ids = [image_id for _, image_id, _ in batch]
     img_embs = image_cache[img_ids]
 
-    # encode_plus 只能针对单个 caption 处理
-    input_ids = []
-    attention_mask = []
-    for _, _, caption in batch:
-        tok = tokenizer.encode_plus(
-            caption,
-            max_length=max_len,
-            padding='max_length', # 填充到最大长度
-            truncation=True,      # 如果超出长度就截断
-            return_tensors='pt'   # 返回 pt(tensor) 或者 np
-        )
-        input_ids.append(tok['input_ids'])
-        attention_mask.append(tok['attention_mask'])
+    captions = [caption for _, _, caption in batch]
+    tok = tokenizer.batch_encode_plus(
+        captions,
+        max_length=max_len,
+        padding='max_length',  # 填充到最大长度
+        truncation=True,       # 如果超出长度就截断
+        return_tensors='pt'    # 返回 pt(tensor) 或者 np
+    )
+    input_ids = tok['input_ids']
+    attention_mask = tok['attention_mask']
 
-    input_ids = torch.cat(input_ids, dim=0)
-    attention_mask = torch.cat(attention_mask, dim=0)
+    # encode_plus 只能针对单个 caption 处理
+    # input_ids = []
+    # attention_mask = []
+    # for _, _, caption in batch:
+    #     tok = tokenizer.encode_plus(
+    #         caption,
+    #         max_length=max_len,
+    #         padding='max_length', # 填充到最大长度
+    #         truncation=True,      # 如果超出长度就截断
+    #         return_tensors='pt'   # 返回 pt(tensor) 或者 np
+    #     )
+    #     input_ids.append(tok['input_ids'])
+    #     attention_mask.append(tok['attention_mask'])
+
+    # input_ids = torch.cat(input_ids, dim=0)
+    # attention_mask = torch.cat(attention_mask, dim=0)
 
     assert input_ids.shape == (len(batch), max_len)
     assert attention_mask.shape == (len(batch), max_len)
