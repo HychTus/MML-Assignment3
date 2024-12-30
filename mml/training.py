@@ -138,7 +138,7 @@ if __name__ == "__main__":
 
     # QA 这部分 wandb 是在如何使用? 为什么对于 model 进行 watch?
     # build train model process with experiment tracking from wandb
-    wandb.init(project="captioner", config=config.__dict__)
+    wandb.init(project="captioner", config=config.__dict__, mode="offline")
     wandb.watch(trainer.model, log="all")
 
     # range 迭代的是 trainer.epoch (还有这种用法)
@@ -160,9 +160,12 @@ if __name__ == "__main__":
             }
         )
 
-        if not os.path.exists(config.weights_dir):
-            os.makedirs(config.weights_dir)
+        # if not os.path.exists(config.weights_dir):
+        #     os.makedirs(config.weights_dir)
 
         # 训练完 6 个 epoch 保存一次模型 (提前检测路径是否存在)
-        if (epoch + 1) % 6 == 0:
-            trainer.save_ckp(os.path.join(config.weights_dir, f"epoch_{epoch + 1}.pt"))
+        # if (epoch + 1) % 6 == 0:
+            # trainer.save_ckp(os.path.join(config.weights_dir, f"epoch_{epoch + 1}.pt"))
+        os.makedirs(ckp_path, exist_ok=True)
+        trainer.save_ckp(os.path.join(ckp_path, f"epoch_{epoch + 1}.pt"))
+            # 这里存储的位置感觉有问题, 完全没有使用到 checkpoint_name

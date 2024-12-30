@@ -12,6 +12,7 @@ class LRWarmup:
         assert k < 0.95 and k > 0.05, "k must be between 0.05 and 0.95"
         self.epochs = epochs
         self.max_lr = 1 # use ratio for the new lambda scheduler
+        # self.max_lr = max_lr
         self.max_point = int(k * self.epochs)
 
     def __call__(self, epoch):

@@ -75,6 +75,7 @@ class Trainer:
                 att_mask.to(self.device),
             )
 
+            self.optimizer.zero_grad() #BUG
             loss = self.model.train_forward(
                 img_emb=img_emb, trg_cap=cap, att_mask=att_mask
             )
@@ -83,7 +84,8 @@ class Trainer:
             #   首先进行 zero_grad() (可以在 forward 之后进行)
             #   scaler 的作用是混合精度训练 (在 backward() 时使用)
 
-            self.optimizer.zero_grad()
+            # loss.backward()
+            # self.optimizer.step()
             self.scaler.scale(loss).backward()
             self.scaler.step(self.optimizer)
             self.scaler.update()

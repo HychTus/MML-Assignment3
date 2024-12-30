@@ -15,7 +15,7 @@ class ConfigS:
     train_size: int = 0.84
     val_size: int = 0.13
     epochs: int = 30
-    lr: int = 3e-3
+    lr: int = 1e-4
     k: float = 0.33
     batch_size_exp: int = 6
     ep_len: int = 4
@@ -41,7 +41,7 @@ class ConfigL:
     train_size: int = 0.84
     val_size: int = 0.13
     epochs: int = 30
-    lr: int = 5e-3
+    lr: int = 1e-4
     k: float = 0.3
     batch_size_exp: int = 5 # 这里设置的是5
     ep_len: int = 4
