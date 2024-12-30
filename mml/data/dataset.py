@@ -38,7 +38,8 @@ class ImageCaptionDataset(Dataset):
         # 甚至只需要 meta_path, 不需要 img_path
         super().__init__()
         self.meta_path = meta_path
-        with open(meta_path, 'rb') as f:
+        #BUG: 原本使用的是 'rb', 表示以二进制读取, 但是这里是 json 文件, 应该使用 'r'
+        with open(meta_path, 'r', encoding='utf-8') as f:
             self.meta = json.load(f)
 
         with open(image_cache_path, 'rb') as f:
@@ -86,6 +87,9 @@ def cl_fn(batch, image_cache, tokenizer, max_len):
 
     input_ids = torch.cat(input_ids, dim=0)
     attention_mask = torch.cat(attention_mask, dim=0)
+
+    assert input_ids.shape == (len(batch), max_len)
+    assert attention_mask.shape == (len(batch), max_len)
 
     # print("tok shape", input_ids.shape, attention_mask.shape)
     # encode_plus 返回的结果是 dict, 包含 input_ids, attention_mask, token_type_ids 等信息

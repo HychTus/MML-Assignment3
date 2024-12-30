@@ -60,7 +60,7 @@ if __name__ == "__main__":
     dataset = ImageCaptionDataset(
         meta_path="/data/chy/others/MML-Assignment3/datasets/train_caption_filtered.json",
         image_cache_path=f"/data/chy/others/MML-Assignment3/cache/{config.clip_model}.pkl",
-        max_len=config.max_len,
+        max_len=config.max_len, # 填充到的 maxlen
         dataset_len=config.dataset_len # 需要在 config 中添加
     )
 
@@ -118,6 +118,7 @@ if __name__ == "__main__":
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, warmup.lr_warmup)
     scaler = torch.cuda.amp.GradScaler()
 
+    # checkpoint_name 如果对应的是 epoch
     ckp_path = os.path.join(config.weights_dir, args.checkpoint_name)
 
     # 使用的是 test_dataset
@@ -138,7 +139,7 @@ if __name__ == "__main__":
 
     # QA 这部分 wandb 是在如何使用? 为什么对于 model 进行 watch?
     # build train model process with experiment tracking from wandb
-    wandb.init(project="captioner", config=config.__dict__, mode="offline")
+    wandb.init(project="captioner", config=config.__dict__) # 还是先 online mode="offline"
     wandb.watch(trainer.model, log="all")
 
     # range 迭代的是 trainer.epoch (还有这种用法)
@@ -160,12 +161,10 @@ if __name__ == "__main__":
             }
         )
 
-        # if not os.path.exists(config.weights_dir):
-        #     os.makedirs(config.weights_dir)
+        if not os.path.exists(config.weights_dir):
+            os.makedirs(config.weights_dir)
 
         # 训练完 6 个 epoch 保存一次模型 (提前检测路径是否存在)
         # if (epoch + 1) % 6 == 0:
-            # trainer.save_ckp(os.path.join(config.weights_dir, f"epoch_{epoch + 1}.pt"))
-        os.makedirs(ckp_path, exist_ok=True)
-        trainer.save_ckp(os.path.join(ckp_path, f"epoch_{epoch + 1}.pt"))
-            # 这里存储的位置感觉有问题, 完全没有使用到 checkpoint_name
+        trainer.save_ckp(os.path.join(config.weights_dir, f"epoch_{epoch + 1}.pt"))
+        # 这里存储的位置感觉有问题, 完全没有使用到 checkpoint_name
