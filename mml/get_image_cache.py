@@ -91,6 +91,11 @@ def get_image_cache(
     with open(new_meta_path, "w") as f:
         json.dump(filtered_meta, f, indent=4)
 
+"""
+python mml/get_image_cache.py --model clip-vit-base-patch32 --calc_emb --cuda_device 0
+python mml/get_image_cache.py --model clip-vit-large-patch14 --calc_emb --cuda_device 1
+需要等到数据下载完毕之后才能进行 encoding
+"""
 
 if __name__ == '__main__':
     # clip model = "openai/clip-vit-large-patch14" or "openai/clip-vit-base-patch32"

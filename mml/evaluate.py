@@ -118,21 +118,22 @@ if __name__ == "__main__":
     #TODO: 需要你自己实现一个ImageCaptionDataset在`data/dataset.py`中
     #   这里应该使用什么 dataset? 使用的比例大小是多少? 
     #   以及这里使用的数据是 img, 而不是 encode 之后的结果  
-    test_dataset = ImageCaptionDataset(
-        meta_path="/data/chy/others/mml-assignment3/datasets/train_caption.json",
-        img_cache_path=f"/data/chy/others/mml-assignment3/cache/{config.clip_model}.pkl",
-        max_len=config.max_len,
-        dataset_len=5 # 只使用5个固定的 sample
+
+    dataset = ImageCaptionDataset(
+        meta_path="/data/chy/others/MML-Assignment3/datasets/train_caption_filtered.json",
+        image_cache_path=f"/data/chy/others/MML-Assignment3/cache/{config.clip_model}.pkl",
+        max_len=config.max_len, # 填充到的 maxlen
+        dataset_len=config.dataset_len # 需要在 config 中添加
     )
 
-    # config.train_size = int(config.train_size * len(dataset))
-    # config.val_size = int(config.val_size * len(dataset))
-    # config.test_size = len(dataset) - config.train_size - config.val_size
-    # 
-    # # 这里仍然使用 random split 感觉不是很合适? 也无法保证 test 固定
-    # _, _, test_dataset = random_split(
-    #     dataset, [config.train_size, config.val_size, config.test_size]
-    # )
+    config.train_size = int(config.train_size * len(dataset))
+    config.val_size = int(config.val_size * len(dataset))
+    config.test_size = len(dataset) - config.train_size - config.val_size
+    
+    # 这里仍然使用 random split 感觉不是很合适? 也无法保证 test 固定
+    _, _, test_dataset = random_split(
+        dataset, [config.train_size, config.val_size, config.test_size]
+    )
 
     if not os.path.exists(config.weights_dir):
         os.makedirs(config.weights_dir)

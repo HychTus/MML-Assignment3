@@ -1,4 +1,4 @@
-name: mml
+name: ac_eval_test
 channels:
   - pytorch
   - nvidia

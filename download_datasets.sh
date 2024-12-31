@@ -10,8 +10,8 @@
 VAL_URL=http://images.cocodataset.org/zips/val2014.zip
 TRAIN_URL=http://images.cocodataset.org/zips/train2014.zip
 
-aria2c -x 16 -o datasets/val2014.zip $VAL_URL
 aria2c -x 16 -o datasets/train2014.zip $TRAIN_URL
+aria2c -x 16 -o datasets/val2014.zip $VAL_URL
 
 # wget -O val2014.zip $VAL_URL
 # wget -O train2014.zip $TRAIN_URL
