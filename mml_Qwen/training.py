@@ -36,6 +36,8 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
+# 为什么 cuda_device 总是会出现错误?
+# print("cuda_device::", args.cuda_device)
 os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
 os.environ["WANDB_API_KEY"] = "0a67c749b5589ca32092b047bdbdcea9d2f8facf"
 
@@ -116,7 +118,7 @@ if __name__ == "__main__":
     warmup = LRWarmup(epochs=config.epochs, max_lr=config.lr, k=config.k)
 
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, warmup.lr_warmup)
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.amp.GradScaler('cuda')
 
     # checkpoint_name 如果对应的是 epoch
     ckp_path = os.path.join(config.weights_dir, args.checkpoint_name)

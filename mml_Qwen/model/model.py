@@ -6,6 +6,9 @@ import torch
 import torch.nn as nn
 from transformers import CLIPModel, CLIPProcessor, Qwen2Tokenizer, Qwen2ForCausalLM
 
+# 调整成使用 Qwen2Tokenizer 和 Qwen2ForCausalLM
+# Qwen2Model 计算出来的是 hidden state, Qwen2ForCausalLM 才能得到 logits
+
 
 MODEL_PATH = "/data/chy/others/MML-Assignment3/models"
 
@@ -112,6 +115,11 @@ class TextDecoder(nn.Module):
         self.model = Qwen2ForCausalLM.from_pretrained(model_path).to(self.device)
         self.vocab_size = self.model.config.vocab_size
 
+        self.word_embeddings = self.model.get_input_embeddings()
+        # for param in self.word_embeddings.parameters():
+        #     param.requires_grad = False
+        # 因为是共享的, 所以不用单独去冻结?
+
     def forward(self, embedding, attention_mask=None):
         # 根据 embedding 序列和 mask 来进行 transformer decode
         # 这里强制使用的是 inputs_embeds, 可以选择使用 input_ids
@@ -162,6 +170,7 @@ class Net(nn.Module):
             max_len: maximum length of the generated text
         """
         super(Net, self).__init__()
+        # print("cuda_device", os.environ["CUDA_VISIBLE_DEVICES"])
 
         self.device = device
         self.ep_len = ep_len
@@ -185,11 +194,15 @@ class Net(nn.Module):
         self.freeze_layers()
 
     def freeze_layers(self):
-        
         #TODO: 这里针对 Qwen 需要进行修改
+        for name, param in self.td.named_parameters():
+            print(name)
+
         for p in [
             *list(self.ie.parameters()),
-            *list(self.td.parameters())[14:-14],
+            *list(self.td.parameters())[13:-13],
+            list(self.td.parameters())[0],  # model.model.embed_tokens.weight
+            list(self.td.parameters())[-1], # model.model.norm.weight
         ]:  # freeze everything, except 1st and last transformer layer in Decoder
             p.requires_grad = False
 
@@ -208,31 +221,33 @@ class Net(nn.Module):
             temperature = 1.0
             print("Temperature must be positive. Setting it to 1.0")
 
-        word_embeddings = self.td.model.get_input_embeddings()
-
         with torch.no_grad():
             img_embedded = self.ie(img)
 
             # (ep_len, embed_size)
             img_mapped = self.mp(img_embedded)
 
-            sos_emb = word_embeddings(torch.tensor(self.td.tokenizer.bos_token_id).to(self.device))
+            # sos_emb = self.td.word_embeddings(torch.tensor(self.td.tokenizer.bos_token_id).to(self.device))
 
             # sos_emb shape embed_size -> (1, embed_size)
-            sos_emb = sos_emb.unsqueeze(0)
+            # sos_emb = sos_emb.unsqueeze(0)
 
             # (ep_len + 1, embed_size)
-            start_emb = torch.cat([sos_emb, img_mapped], dim=0)
+            # start_emb = torch.cat([sos_emb, img_mapped], dim=0)
+            start_emb = img_mapped
+            # BUG: Qwen2Tokenizer 没有 bos token
 
             tokens = []
             for _ in range(self.max_len):
                 if len(tokens):
-                    tok_emb = word_embeddings(torch.tensor(tokens).to(self.device))
+                    tok_emb = self.td.word_embeddings(torch.tensor(tokens).to(self.device))
                     emb = torch.cat([start_emb, tok_emb], dim=0)
                 else:
                     emb = start_emb
 
-                pred = self.td(emb)
+                # print("size::", emb.size()) # torch.Size([4, 896])
+                pred = self.td(emb.unsqueeze(0))
+                pred = pred.squeeze(0)
 
                 pred = torch.softmax(pred / temperature, dim=-1)
 
@@ -269,8 +284,8 @@ class Net(nn.Module):
         # 之前出现类型错误, 要求输出 long 但是输出 
 
         # word embedding
-        word_embeddings = self.td.model.get_input_embeddings()
-        text_emb = word_embeddings(x)
+        # print("grad::", list(self.td.word_embeddings.parameters())[0].requires_grad) False
+        text_emb = self.td.word_embeddings(x)
         # print("text_emb::", text_emb.size()) # torch.Size([64, 39, 896])
         x = torch.concat([img_mapped, text_emb], dim=1)
         # print("x::", x.size()) torch.Size([64, 43, 896])

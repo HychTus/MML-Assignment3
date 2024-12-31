@@ -13,7 +13,7 @@ import numpy as np
 
 import torch
 from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer
+from transformers import Qwen2Tokenizer
 
 MODEL_PATH = "/data/chy/others/MML-Assignment3/models"
 
@@ -116,7 +116,7 @@ def get_loader(
 
     # GPT2 使用的 tokenizer 都是相同的, 所以可以直接使用
     model_path = os.path.join(MODEL_PATH, "Qwen2.5-0.5B")
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    tokenizer = Qwen2Tokenizer.from_pretrained(model_path)
     tokenizer.pad_token = tokenizer.eos_token
     # image_cache = dataset.image_cache
     # max_len = dataset.max_len
