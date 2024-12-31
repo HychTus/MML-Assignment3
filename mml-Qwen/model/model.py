@@ -4,7 +4,7 @@
 import os
 import torch
 import torch.nn as nn
-from transformers import CLIPModel, CLIPProcessor, GPT2LMHeadModel, GPT2Tokenizer
+from transformers import CLIPModel, CLIPProcessor, AutoTokenizer, AutoModel
 
 
 MODEL_PATH = "/data/chy/others/MML-Assignment3/models"
@@ -126,11 +126,11 @@ class TextDecoder(nn.Module):
 
         # 加载 tokenizer, 并且将 tokenize 时用于填充长度的 pad_token 设置为 eos_token
         model_path = os.path.join(MODEL_PATH, model)
-        self.tokenizer = GPT2Tokenizer.from_pretrained(model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
         #NOTE: GPT2LMHeadModel 是 GPT-2 模型的变种，带有语言模型头 (LM head)
-        self.model = GPT2LMHeadModel.from_pretrained(model_path).to(self.device)
+        self.model = AutoModel.from_pretrained(model_path).to(self.device)
         self.vocab_size = self.model.config.vocab_size
 
     def forward(self, embedding, attention_mask=None):
@@ -193,6 +193,13 @@ class Net(nn.Module):
         self.td = TextDecoder(model=text_model, device=device)
 
         # 不是很理解这部分为什么需要 matching
+        #TODO 改成 Qwen 之后这部分是否正常?
+
+        print(
+            f"Embedding size of Image Encoder: {self.ie.model.config.hidden_size}\n",
+            f"Embedding size of Text Decoder: {self.td.model.config.n_embd}"
+        )
+
         assert (
             self.ie.model.config.hidden_size == self.td.model.config.n_embd
         ), "Embedding size of models mismatch"
@@ -347,8 +354,9 @@ class Net(nn.Module):
 if __name__ == "__main__":
     # 这部分应该是模型加载的测试代码, S 和 L 对应的组合
     for clip, text in [
-        ["openai/clip-vit-base-patch32", "gpt2"],
-        ["openai/clip-vit-large-patch14", "gpt2-medium"],
+        # ["openai/clip-vit-base-patch32", "gpt2"],
+        # ["openai/clip-vit-large-patch14", "gpt2-medium"],
+        ["clip-vit-base-patch32", "Qwen2.5-0.5B"],
     ]:
         m = Net(
             clip_model=clip,

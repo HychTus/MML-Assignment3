@@ -9,7 +9,7 @@ from dataclasses import dataclass
 @dataclass
 class ConfigS:
     clip_model: str = "clip-vit-base-patch32"
-    text_model: str = "gpt2"
+    text_model: str = "Qwen2.5-0.5B"
     seed: int = 100
     num_workers: int = 2
     train_size: int = 0.84
@@ -35,7 +35,7 @@ class ConfigL:
     """
 
     clip_model: str = "clip-vit-large-patch14"
-    text_model: str = "gpt2-medium"
+    text_model: str = "Qwen2.5-0.5B"
     seed: int = 100
     num_workers: int = 2
     train_size: int = 0.84
