@@ -4,7 +4,7 @@
 import os
 import torch
 import torch.nn as nn
-from transformers import CLIPModel, CLIPProcessor, Qwen2Tokenizer, Qwen2ForCausalLM, Blip2QFormerAttention
+from transformers import CLIPModel, CLIPProcessor, Qwen2Tokenizer, Qwen2ForCausalLM
 
 
 
@@ -29,6 +29,7 @@ class ImageEncoder(nn.Module):
         return image_features.pooler_output
 
 
+# TODO: 在 QFormer 的中间层对于 query 进行 self-attn 是否合理?
 class QFormerDecoderLayer(nn.Module):
     def __init__(
             self, 
@@ -38,7 +39,6 @@ class QFormerDecoderLayer(nn.Module):
             device
         ):
         super(QFormerDecoderLayer, self).__init__()
-        self.device = device
 
         # 自注意力
         self.self_attn = nn.MultiheadAttention(
@@ -46,9 +46,9 @@ class QFormerDecoderLayer(nn.Module):
             num_heads=num_heads, 
             dropout=dropout, 
             batch_first=True
-        )
-        self.norm1 = nn.LayerNorm(embed_size)
-        self.dropout1 = nn.Dropout(dropout)
+        ).to(device)
+        self.norm1 = nn.LayerNorm(embed_size).to(device)
+        self.dropout1 = nn.Dropout(dropout).to(device)
 
         # 交叉注意力
         self.cross_attn = nn.MultiheadAttention(
@@ -56,9 +56,9 @@ class QFormerDecoderLayer(nn.Module):
             num_heads=num_heads, 
             dropout=dropout, 
             batch_first=True
-        )
-        self.norm2 = nn.LayerNorm(embed_size)
-        self.dropout2 = nn.Dropout(dropout)
+        ).to(device)
+        self.norm2 = nn.LayerNorm(embed_size).to(device)
+        self.dropout2 = nn.Dropout(dropout).to(device)
 
         # 前馈网络
         self.ffn = nn.Sequential(
@@ -66,9 +66,10 @@ class QFormerDecoderLayer(nn.Module):
             nn.GELU(),
             nn.Linear(embed_size * 4, embed_size),
             nn.Dropout(dropout)
-        )
-        self.norm3 = nn.LayerNorm(embed_size)
-        self.dropout3 = nn.Dropout(dropout)
+        ).to(device)
+        self.norm3 = nn.LayerNorm(embed_size).to(device)
+        self.dropout3 = nn.Dropout(dropout).to(device)
+
 
     def forward(self, queries, img_embeddings, self_attn_mask=None):
         # 自注意力
@@ -110,8 +111,9 @@ class QFormerMapping(nn.Module):
             device
         ):
         super(QFormerMapping, self).__init__()
-        self.device = device
+        self.device = device # 需要保存, 要使用
         self.num_queries = num_queries
+        self.output_embed_size = output_embed_size
         self.query_embeddings = nn.Parameter(torch.randn(1, num_queries, embed_size).to(device))
         
         # 定义多层解码器层
@@ -126,23 +128,49 @@ class QFormerMapping(nn.Module):
         ])
         
         # 最终的映射层
-        self.mapper = nn.Linear(embed_size, output_embed_size)
+        self.mapper = nn.Linear(embed_size, output_embed_size).to(device)
         self.init_weights()
 
 
-    def forward(self, img_embeddings, self_attn_mask=None):
-        # self_attn_mask 在 QFormer 中理论上应该不用使用
-        # img_embeddings: [batch_size, seq_len, embed_size]
-        batch_size = img_embeddings.size(0)
+    def forward(self, img_embs, attn_mask=None, train_mode=False):
+        # attn_mask 在 QFormer 中理论上应该不用使用
+        # img_embs: [batch_size, seq_len, embed_size]
+
+        # transformer 应该能够自动处理 batch 和非 batch
+        # 这里是可以共享的, 因为最终要计算梯度并且进行更新, 必须要进行共享
+
+        # BUG: MultiheadAttention 强制要求 dim=3
+        if not train_mode:
+            img_embs = img_embs.unsqueeze(0)
+
+        # print("img_embs size::", img_embs.size())
+        # print("attn_mask size::", attn_mask.size())
+        
+        # img_embs size torch.Size([64, 768])
+        # BUG: 需要将 image embs 视为 1 个 token, 转换为 [64, 1, 768]
+        # TODO: 是否应该先使用原始的 MLP, 再使用 QFormer?
+        # 但是本质上就是 query 从 image embs 中提取信息, 问题不大?
+
+        batch_size = img_embs.size(0)
+        img_embs = img_embs.view(batch_size, 1, -1)
         queries = self.query_embeddings.expand(batch_size, self.num_queries, -1)
+
         queries = queries.to(self.device)
-        img_embeddings = img_embeddings.to(self.device)
+        img_embs = img_embs.to(self.device)
         
         for layer in self.layers:
-            queries = layer(queries, img_embeddings, self_attn_mask)
+            queries = layer(queries, img_embs, attn_mask)
         
-        mapped_embeddings = self.mapper(queries)
-        return mapped_embeddings
+        mapped_embs = self.mapper(queries)
+        mapped_embs = mapped_embs.view(
+            *(
+                [-1, self.num_queries, self.output_embed_size]
+                if train_mode
+                else [self.num_queries, self.output_embed_size]
+            )
+        )  # for batched input
+
+        return mapped_embs
 
 
     def init_weights(self):
