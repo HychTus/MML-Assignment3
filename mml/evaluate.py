@@ -49,6 +49,10 @@ parser.add_argument(
     "-T", "--temperature", type=float, default=1.0, help="Temperature for sampling"
 )
 
+parser.add_argument(
+    "-N", "--num_samples", type=int, default=1, help="Number of samples to generate"
+)
+
 args = parser.parse_args()
 
 config = ConfigL() if args.size.upper() == "L" else ConfigS()
@@ -135,23 +139,29 @@ if __name__ == "__main__":
         dataset, [config.train_size, config.val_size, config.test_size]
     )
 
+    test_dataset = random.sample(list(test_dataset), args.num_samples)
+
     if not os.path.exists(config.weights_dir):
         os.makedirs(config.weights_dir)
+
+    print(ckp_path)
 
     if not os.path.isfile(ckp_path):
         download_weights(ckp_path, args.size)
 
     #TODO: 关于加载/保存模型相关的方法
     checkpoint = torch.load(ckp_path, map_location=device)
-    model.load_state_dict(checkpoint) # 将 torch.load 的结果赋值给 model
+    model.load_state_dict(checkpoint['model_state_dict']) # 将 torch.load 的结果赋值给 model
 
     save_path = os.path.join(
         # res_path 是保存结果的位置
         # 命名为 checkpoint_name 除去后缀名
-        args.res_path, f"{args.checkpoint_name[:-3]}_{args.size.upper()}"
+        args.res_path, 
+        config.weights_dir.split('/')[-1],
+        args.checkpoint_name.split('.')[0]
     )
 
     if not os.path.exists(save_path):
-        os.mkdir(save_path)
+        os.makedirs(save_path)
 
     evaluate_dataset(model, test_dataset, args.img_path, save_path, args.temperature)
