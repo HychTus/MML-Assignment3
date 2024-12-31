@@ -4,7 +4,7 @@
 import os
 import torch
 import torch.nn as nn
-from transformers import CLIPModel, CLIPProcessor, AutoTokenizer, AutoModel
+from transformers import CLIPModel, CLIPProcessor, Qwen2Tokenizer, Qwen2ForCausalLM
 
 
 MODEL_PATH = "/data/chy/others/MML-Assignment3/models"
@@ -105,15 +105,16 @@ class TextDecoder(nn.Module):
         # 调整为使用 AutoTokenize, pad_token 和 eos_token 的设置仍然不变
         self.device = device
         model_path = os.path.join(MODEL_PATH, model)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.tokenizer = Qwen2Tokenizer.from_pretrained(model_path)
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # 从 GPT2LMHeadModel 调整为使用 AutoModel
-        self.model = AutoModel.from_pretrained(model_path).to(self.device)
+        self.model = Qwen2ForCausalLM.from_pretrained(model_path).to(self.device)
         self.vocab_size = self.model.config.vocab_size
 
     def forward(self, embedding, attention_mask=None):
         # 根据 embedding 序列和 mask 来进行 transformer decode
+        # 这里强制使用的是 inputs_embeds, 可以选择使用 input_ids
         model_output = self.model(
             inputs_embeds=embedding, attention_mask=attention_mask
         )
@@ -131,7 +132,7 @@ class TextDecoder(nn.Module):
 
         # last_hidden_state 为 decode 之后整个序列最后的隐藏层
         # 这里输出的不是最终 vcab_size 的 logits, 所以出现了问题!
-        return model_output['last_hidden_state']
+        return model_output.logits
 
 
 class Net(nn.Module):
