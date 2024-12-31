@@ -4,7 +4,9 @@
 import os
 import torch
 import torch.nn as nn
-from transformers import CLIPModel, CLIPProcessor, Qwen2Tokenizer, Qwen2ForCausalLM
+from transformers import CLIPModel, CLIPProcessor, Qwen2Tokenizer, Qwen2ForCausalLM, Blip2QFormerAttention
+
+
 
 MODEL_PATH = "/data/chy/others/MML-Assignment3/models"
 
@@ -27,59 +29,124 @@ class ImageEncoder(nn.Module):
         return image_features.pooler_output
 
 
-class Mapping(nn.Module):
-    """
-    Maps image embedding to GPT-2 embedding.
-    """
-
+class QFormerDecoderLayer(nn.Module):
     def __init__(
-        self,
-        ep_len,
-        num_layers,
-        embed_size,
-        output_embed_size,
-        n_heads,
-        forward_expansion,
-        dropout,
-        device="cpu",
-    ):
-        super(Mapping, self).__init__()
-
-        self.ep_len = ep_len
-        self.embed_size = embed_size
-        self.output_embed_size = output_embed_size
+            self, 
+            embed_size, 
+            num_heads, 
+            dropout, 
+            device
+        ):
+        super(QFormerDecoderLayer, self).__init__()
         self.device = device
-        
-        self.transformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=embed_size,
-                nhead=n_heads,
-                dim_feedforward=embed_size * forward_expansion,
-                dropout=dropout,
-                batch_first=True,
-                device=device,
-            ),
-            num_layers=num_layers,
-        ).to(self.device)
 
-        self.mapper = nn.Linear(embed_size, ep_len * output_embed_size).to(self.device)
+        # 自注意力
+        self.self_attn = nn.MultiheadAttention(
+            embed_dim=embed_size, 
+            num_heads=num_heads, 
+            dropout=dropout, 
+            batch_first=True
+        )
+        self.norm1 = nn.LayerNorm(embed_size)
+        self.dropout1 = nn.Dropout(dropout)
+
+        # 交叉注意力
+        self.cross_attn = nn.MultiheadAttention(
+            embed_dim=embed_size, 
+            num_heads=num_heads, 
+            dropout=dropout, 
+            batch_first=True
+        )
+        self.norm2 = nn.LayerNorm(embed_size)
+        self.dropout2 = nn.Dropout(dropout)
+
+        # 前馈网络
+        self.ffn = nn.Sequential(
+            nn.Linear(embed_size, embed_size * 4),
+            nn.GELU(),
+            nn.Linear(embed_size * 4, embed_size),
+            nn.Dropout(dropout)
+        )
+        self.norm3 = nn.LayerNorm(embed_size)
+        self.dropout3 = nn.Dropout(dropout)
+
+    def forward(self, queries, img_embeddings, self_attn_mask=None):
+        # 自注意力
+        attn_output, _ = self.self_attn(
+            query=queries, 
+            key=queries, 
+            value=queries, 
+            attn_mask=self_attn_mask
+        )
+        queries = queries + self.dropout1(attn_output)
+        queries = self.norm1(queries)
+
+        # 交叉注意力
+        attn_output, _ = self.cross_attn(
+            query=queries, 
+            key=img_embeddings, 
+            value=img_embeddings
+        )
+        queries = queries + self.dropout2(attn_output)
+        queries = self.norm2(queries)
+
+        # 前馈网络
+        ffn_output = self.ffn(queries)
+        queries = queries + self.dropout3(ffn_output)
+        queries = self.norm3(queries)
+
+        return queries
+
+
+class QFormerMapping(nn.Module):
+    def __init__(
+            self, 
+            embed_size,
+            output_embed_size, 
+            num_heads, 
+            dropout, 
+            num_queries, 
+            num_layers,
+            device
+        ):
+        super(QFormerMapping, self).__init__()
+        self.device = device
+        self.num_queries = num_queries
+        self.query_embeddings = nn.Parameter(torch.randn(1, num_queries, embed_size).to(device))
+        
+        # 定义多层解码器层
+        self.layers = nn.ModuleList([
+            QFormerDecoderLayer(
+                embed_size=embed_size, 
+                num_heads=num_heads, 
+                dropout=dropout, 
+                device=device
+            )
+            for _ in range(num_layers)
+        ])
+        
+        # 最终的映射层
+        self.mapper = nn.Linear(embed_size, output_embed_size)
         self.init_weights()
 
-    def forward(self, img_embedded, train_mode=False):
-        x = self.transformer_encoder(img_embedded)
-        x = self.mapper(x)
 
-        x = x.view(
-            *(
-                [-1, self.ep_len, self.output_embed_size]
-                if train_mode
-                else [self.ep_len, self.output_embed_size]
-            )
-        )  # for batched input
+    def forward(self, img_embeddings, self_attn_mask=None):
+        # self_attn_mask 在 QFormer 中理论上应该不用使用
+        # img_embeddings: [batch_size, seq_len, embed_size]
+        batch_size = img_embeddings.size(0)
+        queries = self.query_embeddings.expand(batch_size, self.num_queries, -1)
+        queries = queries.to(self.device)
+        img_embeddings = img_embeddings.to(self.device)
+        
+        for layer in self.layers:
+            queries = layer(queries, img_embeddings, self_attn_mask)
+        
+        mapped_embeddings = self.mapper(queries)
+        return mapped_embeddings
 
-        return x
 
     def init_weights(self):
+        # 这部分代码不需要修改, 已经能够处理 transformer 的初始化情况
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity="relu")
@@ -127,8 +194,7 @@ class Net(nn.Module):
         text_model,
         ep_len,
         num_layers,
-        n_heads,
-        forward_expansion,
+        num_heads,
         dropout,
         max_len,
         device="cpu",
@@ -150,25 +216,24 @@ class Net(nn.Module):
         self.ie = ImageEncoder(model=clip_model, device=device)
         self.td = TextDecoder(model=text_model, device=device)
 
-        self.mp = Mapping(
-            ep_len=self.ep_len,
-            num_layers=num_layers,
+        self.mp = QFormerMapping(
             embed_size=self.ie.model.config.hidden_size,
             output_embed_size=self.td.model.config.hidden_size,
-            n_heads=n_heads,
-            forward_expansion=forward_expansion,
+            num_heads=num_heads,
             dropout=dropout,
+            num_queries=ep_len, # query 数量就对应最终的 token 个数
+            num_layers=num_layers,
             device=device,
         )
-        
+
         self.max_len = max_len
         self.criterion = nn.CrossEntropyLoss()
         self.freeze_layers()
 
     def freeze_layers(self):
         #TODO: 这里针对 Qwen 需要进行修改
-        for name, param in self.td.named_parameters():
-            print(name)
+        # for name, param in self.td.named_parameters():
+        #     print(name)
 
         for p in [
             *list(self.ie.parameters()),
