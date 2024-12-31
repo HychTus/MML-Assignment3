@@ -24,7 +24,7 @@ class ConfigS:
     forward_expansion: int = 4
     max_len: int = 40
     dropout: float = 0.1
-    weights_dir: str = "/data/chy/others/MML-Assignment3/results/weights/origin_small"
+    weights_dir: str = "/data/chy/others/MML-Assignment3/results/weights/Qwen_small"
     dataset_len: int = -1
 
 
@@ -50,7 +50,7 @@ class ConfigL:
     forward_expansion: int = 4
     max_len: int = 40
     dropout: float = 0.08
-    weights_dir: str = "/data/chy/others/MML-Assignment3/results/weights/origin_large"
+    weights_dir: str = "/data/chy/others/MML-Assignment3/results/weights/Qwen_large"
     dataset_len: int = -1
 
 
