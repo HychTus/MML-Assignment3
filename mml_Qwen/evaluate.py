@@ -49,6 +49,10 @@ parser.add_argument(
     "-T", "--temperature", type=float, default=1.0, help="Temperature for sampling"
 )
 
+parser.add_argument(
+    "-N", "--num_samples", type=int, default=1, help="Number of samples to generate"
+)
+
 args = parser.parse_args()
 
 config = ConfigL() if args.size.upper() == "L" else ConfigS()
@@ -134,6 +138,8 @@ if __name__ == "__main__":
     _, _, test_dataset = random_split(
         dataset, [config.train_size, config.val_size, config.test_size]
     )
+
+    test_dataset = random.sample(list(test_dataset), args.num_samples)
 
     if not os.path.exists(config.weights_dir):
         os.makedirs(config.weights_dir)
