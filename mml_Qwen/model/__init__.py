@@ -1,2 +1,2 @@
-from mml.model.trainer import *
-from mml.model.model import *
+from mml_Qwen.model.trainer import *
+from mml_Qwen.model.model import *
