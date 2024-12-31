@@ -12,9 +12,9 @@ import torch.optim as optim
 from torch.utils.data import random_split
 
 import wandb
-from mml.data import ImageCaptionDataset, get_loader
-from mml.model import Net, Trainer
-from mml.utils import ConfigS, ConfigL, LRWarmup
+from mml_Qwen.data import ImageCaptionDataset, get_loader
+from mml_Qwen.model import Net, Trainer
+from mml_Qwen.utils import ConfigS, ConfigL, LRWarmup
 
 parser = argparse.ArgumentParser()
 
